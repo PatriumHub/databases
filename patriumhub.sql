@@ -1,15 +1,19 @@
 -- =============================================================================
--- PatriumHub — instalación limpia (schema completo + seed mínimo)
+-- PatriumHub — ÚNICO archivo de instalación
 -- BD: patriumhub · utf8mb4 / utf8mb4_unicode_ci
--- Schema version: 0.8.0
+-- Schema version: 0.8.1
+--
+-- Importar SOLO este archivo en phpMyAdmin (Importar → Ejecutar).
+-- Crea la BD, todas las tablas, índices, FKs y seed mínimo.
+-- No hace falta ningún patch adicional.
 --
 -- Incluye: patrimonio, presupuestos, snapshots, integraciones WC/MP,
 --          saved_views, company_financial_plans (servicios/productos),
---          user_entity_access (permisos por entidad).
+--          companies.business_model, user_entity_access (permisos),
+--          receivables.status con 'paid'.
 -- No incluye: datos de producción ni credenciales de integraciones.
 --
--- Importar en phpMyAdmin (crea la BD). Reemplaza dumps/patches previos.
--- Generado por: databases/build_install_sql.py
+-- Login seed: admin@patriumhub.local / admin123  (cambiar tras el primer login)
 -- =============================================================================
 
 CREATE DATABASE IF NOT EXISTS patriumhub
@@ -248,7 +252,7 @@ CREATE TABLE `receivables` (
   `original_amount` decimal(18,2) NOT NULL DEFAULT '0.00',
   `outstanding_amount` decimal(18,2) NOT NULL DEFAULT '0.00',
   `due_date` date DEFAULT NULL,
-  `status` enum('current','overdue','uncollectible','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'current',
+  `status` enum('current','overdue','uncollectible','cancelled','paid') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'current',
   `collection_probability` decimal(5,2) DEFAULT NULL,
   `include_in_net_worth` tinyint(1) NOT NULL DEFAULT '1',
   `notes` text COLLATE utf8mb4_unicode_ci,
@@ -976,7 +980,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`
 
 INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
 ('app.name', 'PatriumHub', CURRENT_TIMESTAMP),
-('schema.version', '0.8.0', CURRENT_TIMESTAMP),
+('schema.version', '0.8.1', CURRENT_TIMESTAMP),
 ('ui.hide_amounts', '0', CURRENT_TIMESTAMP);
 
 -- Fin instalación PatriumHub
