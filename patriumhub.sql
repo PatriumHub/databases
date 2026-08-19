@@ -1,7 +1,7 @@
 -- =============================================================================
 -- PatriumHub — ÚNICO archivo de instalación
 -- BD: patriumhub · utf8mb4 / utf8mb4_unicode_ci
--- Schema version: 0.8.6
+-- Schema version: 0.8.7
 --
 -- Importar SOLO este archivo en phpMyAdmin (Importar → Ejecutar).
 -- Crea la BD, todas las tablas, índices, FKs y seed mínimo.
@@ -10,6 +10,7 @@
 -- Incluye: patrimonio, presupuestos, snapshots, integraciones WC/MP,
 --          saved_views, company_financial_plans (servicios/productos),
 --          person_financial_plans (proyección personal),
+--          financial_goals (metas personalizadas; milestones viven en app + settings),
 --          companies.business_model, user_entity_access (permisos),
 --          company_clients (fichas de cliente para empresas de servicios),
 --          documents con related_type company_client_contract | company_client_file,
@@ -35,6 +36,14 @@
 --     La UI de flujo no incluye doughnut de «composición».
 --   · Inicio / Dashboard: segunda fila de KPIs = cada métrica como % de total_assets
 --     (partial stat_pct_of_assets; sin columnas nuevas).
+--   · Objetivos (/objetivos · «Objetivos fundamentales»):
+--       Milestones 01–03 (cards full-width, Cumplidos N/N):
+--         01 fondo ARS 1.200.000 — juntado en settings goals.ramsey.emergency_*;
+--         02 deudas = pasivos abiertos de entities.type=person;
+--         03 meta auto = 15% ingreso neto personas del año en curso;
+--            ahorrado manual settings goals.ramsey.ms03_saved_{año}_{moneda}.
+--       Metas personalizadas: tabla financial_goals; listado en /objetivos;
+--       alta en /objetivos/nuevo (también Cumplidos N/N).
 --   · account_owners: cuentas compartidas entre personas (mismo patrón que asset_owners).
 --
 -- No incluye: datos de producción ni credenciales de integraciones.
@@ -61,6 +70,7 @@ DROP TABLE IF EXISTS `tags`;
 DROP TABLE IF EXISTS `saved_views`;
 DROP TABLE IF EXISTS `net_worth_snapshots`;
 DROP TABLE IF EXISTS `sales_metrics`;
+DROP TABLE IF EXISTS `financial_goals`;
 DROP TABLE IF EXISTS `sync_cursors`;
 DROP TABLE IF EXISTS `sync_runs`;
 DROP TABLE IF EXISTS `integration_credentials`;
@@ -508,6 +518,26 @@ CREATE TABLE `person_financial_plans` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
+-- Tabla `financial_goals`
+-- Metas personalizadas (menú Objetivos → Tus objetivos / /objetivos/nuevo).
+-- Milestones 01–03 NO viven acá: se calculan en FinancialGoalsService
+-- (settings para juntado MS01/MS03; liabilities de personas para MS02).
+--
+CREATE TABLE `financial_goals` (
+  `id` int UNSIGNED NOT NULL,
+  `name` varchar(180) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `target_amount` decimal(18,2) NOT NULL DEFAULT '0.00',
+  `current_amount` decimal(18,2) NOT NULL DEFAULT '0.00',
+  `currency_code` char(3) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ARS',
+  `starts_on` date NOT NULL,
+  `ends_on` date NOT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `status` enum('active','completed','archived') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
 -- Tabla `integrations`
 --
 CREATE TABLE `integrations` (
@@ -865,6 +895,12 @@ ALTER TABLE `person_financial_plans`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_pfp_entity` (`entity_id`);
 
+ALTER TABLE `financial_goals`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_fg_status` (`status`),
+  ADD KEY `idx_fg_currency` (`currency_code`),
+  ADD KEY `idx_fg_dates` (`starts_on`,`ends_on`);
+
 ALTER TABLE `company_clients`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_cc_entity` (`entity_id`),
@@ -961,6 +997,9 @@ ALTER TABLE `company_financial_plans`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 ALTER TABLE `person_financial_plans`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+ALTER TABLE `financial_goals`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 ALTER TABLE `company_clients`
@@ -1097,6 +1136,9 @@ ALTER TABLE `company_financial_plans`
 ALTER TABLE `person_financial_plans`
   ADD CONSTRAINT `fk_pfp_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
+ALTER TABLE `financial_goals`
+  ADD CONSTRAINT `fk_fg_currency` FOREIGN KEY (`currency_code`) REFERENCES `currencies` (`code`);
+
 ALTER TABLE `company_clients`
   ADD CONSTRAINT `fk_cc_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
@@ -1130,7 +1172,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`
 
 INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
 ('app.name', 'PatriumHub', CURRENT_TIMESTAMP),
-('schema.version', '0.8.6', CURRENT_TIMESTAMP),
+('schema.version', '0.8.7', CURRENT_TIMESTAMP),
 ('ui.hide_amounts', '0', CURRENT_TIMESTAMP);
 
 -- Fin instalación PatriumHub
