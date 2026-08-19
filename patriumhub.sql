@@ -24,6 +24,17 @@
 --   · Proyecciones consolidadas (/proyecciones) leen person_financial_plans +
 --     company_financial_plans (solo lectura; la carga es por ficha).
 --   · Insight «promedio mensual» = disponible neto anual / 12 (persona y /proyecciones).
+--   · Gasto diario máximo = disponible neto del mes / días de ese mes (12 cards + gráfico);
+--     disponible neto = balance − ahorro; referencia = promedio mensual ÷ 30.
+--   · Carga de egresos (persona y /proyecciones) = egresos planilla / ingresos:
+--       anillo del año (egresos + ahorro + disponible neto), mes a mes apilado
+--       (rojo ≥50% / gris <50% egresos, celeste ahorro, verde disponible neto),
+--       ranking por entidad (barras horizontales) y personas vs empresas (solo consolidado).
+--     En ficha persona: además desglose por categoría (nombre de cada línea de egreso × % ingreso).
+--     Meta de ahorro (%): solo sobre saldo mensual positivo; no usa budget_templates.
+--     La UI de flujo no incluye doughnut de «composición».
+--   · Inicio / Dashboard: segunda fila de KPIs = cada métrica como % de total_assets
+--     (partial stat_pct_of_assets; sin columnas nuevas).
 --   · account_owners: cuentas compartidas entre personas (mismo patrón que asset_owners).
 --
 -- No incluye: datos de producción ni credenciales de integraciones.
@@ -470,6 +481,7 @@ CREATE TABLE `company_clients` (
 -- Tabla `company_financial_plans`
 -- workbook_json: hojas por año (ingresos/egresos, % ahorro). Alimenta Estados y proyección
 -- y la vista consolidada /proyecciones.
+-- Ahorro = meta % solo sobre balance mensual positivo; disponible neto = balance − ahorro.
 --
 CREATE TABLE `company_financial_plans` (
   `id` int UNSIGNED NOT NULL,
@@ -483,6 +495,9 @@ CREATE TABLE `company_financial_plans` (
 -- Tabla `person_financial_plans`
 -- Proyección personal (ingresos/egresos/ahorro por año en workbook_json).
 -- Pestaña Persona → Proyecciones; también entra en /proyecciones consolidado.
+-- UI: promedio mensual = disponible neto/12; gasto diario = neto del mes/días (ref ÷30);
+--     neto = balance − ahorro (meta % solo si balance > 0);
+--     carga = egresos + ahorro + disponible neto (anillo, mes, por categoría = nombre línea).
 --
 CREATE TABLE `person_financial_plans` (
   `id` int UNSIGNED NOT NULL,
