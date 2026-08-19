@@ -27,13 +27,19 @@
 --   · Insight «promedio mensual» = disponible neto anual / 12 (persona y /proyecciones).
 --   · Gasto diario máximo = disponible neto del mes / días de ese mes (12 cards + gráfico);
 --     disponible neto = balance − ahorro; referencia = promedio mensual ÷ 30.
---   · Carga de egresos (persona y /proyecciones) = egresos planilla / ingresos:
+--   · Carga de egresos (persona, empresa y /proyecciones) = egresos planilla / ingresos:
 --       anillo del año (egresos + ahorro + disponible neto), mes a mes apilado
 --       (rojo ≥50% / gris <50% egresos, celeste ahorro, verde disponible neto),
 --       ranking por entidad (barras horizontales) y personas vs empresas (solo consolidado).
---     En ficha persona: además desglose por categoría (nombre de cada línea de egreso × % ingreso).
+--     En ficha persona y empresa (Estados y proyección): además desglose por categoría
+--       (nombre de cada línea de egreso × % ingreso) + gasto diario máximo.
 --     Meta de ahorro (%): solo sobre saldo mensual positivo; no usa budget_templates.
 --     La UI de flujo no incluye doughnut de «composición».
+--   · Año activo en planillas (persona + empresa):
+--       al abrir, el año por defecto = año calendario del servidor (o el más cercano);
+--       en empresa, Comparativa por año y Detalle del año comparten el mismo índice
+--       (cambiar el select o la pestaña actualiza ambos); «+ Año» agrega el siguiente
+--       año numérico sin prompt (doble clic en la pestaña para renombrar).
 --   · Inicio / Dashboard: segunda fila de KPIs = cada métrica como % de total_assets
 --     (partial stat_pct_of_assets; sin columnas nuevas).
 --   · Objetivos (/objetivos · «Objetivos fundamentales»):
@@ -45,6 +51,10 @@
 --       Metas personalizadas: tabla financial_goals; listado en /objetivos;
 --       alta en /objetivos/nuevo (también Cumplidos N/N).
 --   · account_owners: cuentas compartidas entre personas (mismo patrón que asset_owners).
+--   · Cobrables (receivables): listado /cobrables y pestaña en persona/empresa con
+--       cabeceras ordenables (cliente); ficha entidad muestra due_date (Vence);
+--       alta/edición/cobro desde ficha usa return_to seguro (safe_return_path) y
+--       vuelve a la entidad, no al listado general.
 --
 -- No incluye: datos de producción ni credenciales de integraciones.
 --
@@ -315,6 +325,9 @@ CREATE TABLE `properties` (
 
 --
 -- Tabla `receivables`
+-- Cuentas por cobrar (quién debe, a qué entidad, monto, due_date, status incl. paid).
+-- UI: orden por cabeceras; en ficha persona/empresa se muestra Vence; return_to al
+--     crear/cobrar desde la ficha (helpers.safe_return_path).
 --
 CREATE TABLE `receivables` (
   `id` int UNSIGNED NOT NULL,
@@ -492,6 +505,8 @@ CREATE TABLE `company_clients` (
 -- workbook_json: hojas por año (ingresos/egresos, % ahorro). Alimenta Estados y proyección
 -- y la vista consolidada /proyecciones.
 -- Ahorro = meta % solo sobre balance mensual positivo; disponible neto = balance − ahorro.
+-- UI (financial-plan.js): Comparativa + Detalle sincronizados; año default = calendario;
+--   carga de egresos + gasto diario al pie; «+ Año» = siguiente año sin prompt.
 --
 CREATE TABLE `company_financial_plans` (
   `id` int UNSIGNED NOT NULL,
@@ -505,9 +520,11 @@ CREATE TABLE `company_financial_plans` (
 -- Tabla `person_financial_plans`
 -- Proyección personal (ingresos/egresos/ahorro por año en workbook_json).
 -- Pestaña Persona → Proyecciones; también entra en /proyecciones consolidado.
--- UI: promedio mensual = disponible neto/12; gasto diario = neto del mes/días (ref ÷30);
+-- UI: año default = calendario; promedio mensual = disponible neto/12;
+--     gasto diario = neto del mes/días (ref ÷30);
 --     neto = balance − ahorro (meta % solo si balance > 0);
---     carga = egresos + ahorro + disponible neto (anillo, mes, por categoría = nombre línea).
+--     carga = egresos + ahorro + disponible neto (anillo, mes, por categoría = nombre línea);
+--     «+ Año» = siguiente año numérico (doble clic en pestaña para renombrar).
 --
 CREATE TABLE `person_financial_plans` (
   `id` int UNSIGNED NOT NULL,
