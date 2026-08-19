@@ -50,7 +50,13 @@
 --            ahorrado manual settings goals.ramsey.ms03_saved_{año}_{moneda}.
 --       Metas personalizadas: tabla financial_goals; listado en /objetivos;
 --       alta en /objetivos/nuevo (también Cumplidos N/N).
---   · account_owners: cuentas compartidas entre personas (mismo patrón que asset_owners).
+--   · Resumen persona: bloque Proyección usa la hoja del año calendario
+--     (no el activeYear guardado); si no hay hoja, la más cercana.
+--   · Tema claro/oscuro: solo UI (html[data-theme] + localStorage patrium-theme).
+--     No hay columna de preferencia; cards accent y thead usan tokens de superficie
+--     (--navy / --table-head) para contraste en ambos temas.
+--   · Volver arriba: botón fijo en el layout (aparece al scrollear); no hay columna.
+
 --   · Cobrables (receivables): listado /cobrables y pestaña en persona/empresa con
 --       cabeceras ordenables (cliente); ficha entidad muestra due_date (Vence);
 --       alta/edición/cobro desde ficha usa return_to seguro (safe_return_path) y
