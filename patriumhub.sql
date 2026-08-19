@@ -1,7 +1,7 @@
 -- =============================================================================
 -- PatriumHub — ÚNICO archivo de instalación
 -- BD: patriumhub · utf8mb4 / utf8mb4_unicode_ci
--- Schema version: 0.8.2
+-- Schema version: 0.8.6
 --
 -- Importar SOLO este archivo en phpMyAdmin (Importar → Ejecutar).
 -- Crea la BD, todas las tablas, índices, FKs y seed mínimo.
@@ -9,10 +9,23 @@
 --
 -- Incluye: patrimonio, presupuestos, snapshots, integraciones WC/MP,
 --          saved_views, company_financial_plans (servicios/productos),
+--          person_financial_plans (proyección personal),
 --          companies.business_model, user_entity_access (permisos),
 --          company_clients (fichas de cliente para empresas de servicios),
 --          documents con related_type company_client_contract | company_client_file,
+--          asset_owners (co-titulares de activos personales),
+--          account_owners (co-titulares de cuentas personales),
 --          receivables.status con 'paid'.
+--
+-- Reglas de app (no son columnas extra; el motor las aplica):
+--   · budget_items pending con period_ym <= mes actual → suman a pasivos / neto.
+--     Meses futuros se pueden generar al navegar Presupuestos, pero NO bajan el neto
+--     hasta que llega ese mes (Y-m del servidor).
+--   · Proyecciones consolidadas (/proyecciones) leen person_financial_plans +
+--     company_financial_plans (solo lectura; la carga es por ficha).
+--   · Insight «promedio mensual» = disponible neto anual / 12 (persona y /proyecciones).
+--   · account_owners: cuentas compartidas entre personas (mismo patrón que asset_owners).
+--
 -- No incluye: datos de producción ni credenciales de integraciones.
 --
 -- Login seed: admin@patriumhub.local / admin123  (cambiar tras el primer login)
@@ -42,6 +55,7 @@ DROP TABLE IF EXISTS `sync_runs`;
 DROP TABLE IF EXISTS `integration_credentials`;
 DROP TABLE IF EXISTS `integrations`;
 DROP TABLE IF EXISTS `company_clients`;
+DROP TABLE IF EXISTS `person_financial_plans`;
 DROP TABLE IF EXISTS `company_financial_plans`;
 DROP TABLE IF EXISTS `budget_items`;
 DROP TABLE IF EXISTS `budget_templates`;
@@ -52,6 +66,8 @@ DROP TABLE IF EXISTS `inventories`;
 DROP TABLE IF EXISTS `liabilities`;
 DROP TABLE IF EXISTS `receivables`;
 DROP TABLE IF EXISTS `properties`;
+DROP TABLE IF EXISTS `account_owners`;
+DROP TABLE IF EXISTS `asset_owners`;
 DROP TABLE IF EXISTS `assets`;
 DROP TABLE IF EXISTS `account_balances`;
 DROP TABLE IF EXISTS `accounts`;
@@ -201,6 +217,28 @@ CREATE TABLE `account_balances` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
+-- Tabla `account_owners` (co-titulares personas; empresas usan solo accounts.entity_id)
+--
+CREATE TABLE `account_owners` (
+  `id` int UNSIGNED NOT NULL,
+  `account_id` int UNSIGNED NOT NULL,
+  `entity_id` int UNSIGNED NOT NULL,
+  `ownership_pct` decimal(7,4) NOT NULL DEFAULT '100.0000',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Tabla `account_owners` (co-titulares personas; empresas usan solo accounts.entity_id)
+--
+CREATE TABLE `account_owners` (
+  `id` int UNSIGNED NOT NULL,
+  `account_id` int UNSIGNED NOT NULL,
+  `entity_id` int UNSIGNED NOT NULL,
+  `ownership_pct` decimal(7,4) NOT NULL DEFAULT '100.0000',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
 -- Tabla `assets`
 --
 CREATE TABLE `assets` (
@@ -219,6 +257,17 @@ CREATE TABLE `assets` (
   `notes` text COLLATE utf8mb4_unicode_ci,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Tabla `asset_owners` (co-titulares personas; empresas usan solo assets.entity_id)
+--
+CREATE TABLE `asset_owners` (
+  `id` int UNSIGNED NOT NULL,
+  `asset_id` int UNSIGNED NOT NULL,
+  `entity_id` int UNSIGNED NOT NULL,
+  `ownership_pct` decimal(7,4) NOT NULL DEFAULT '100.0000',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -375,6 +424,9 @@ CREATE TABLE `budget_templates` (
 
 --
 -- Tabla `budget_items`
+-- Instancia mensual de un gasto_templates.
+-- period_ym = 'YYYY-MM'. Solo pending con period_ym <= mes actual cuentan como pasivo
+-- (ver PatrimonioService / LiabilityController). Meses adelantados no impactan el neto.
 --
 CREATE TABLE `budget_items` (
   `id` int UNSIGNED NOT NULL,
@@ -416,8 +468,23 @@ CREATE TABLE `company_clients` (
 
 --
 -- Tabla `company_financial_plans`
+-- workbook_json: hojas por año (ingresos/egresos, % ahorro). Alimenta Estados y proyección
+-- y la vista consolidada /proyecciones.
 --
 CREATE TABLE `company_financial_plans` (
+  `id` int UNSIGNED NOT NULL,
+  `entity_id` int UNSIGNED NOT NULL,
+  `workbook_json` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Tabla `person_financial_plans`
+-- Proyección personal (ingresos/egresos/ahorro por año en workbook_json).
+-- Pestaña Persona → Proyecciones; también entra en /proyecciones consolidado.
+--
+CREATE TABLE `person_financial_plans` (
   `id` int UNSIGNED NOT NULL,
   `entity_id` int UNSIGNED NOT NULL,
   `workbook_json` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -607,11 +674,21 @@ ALTER TABLE `account_balances`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_ab_account_date` (`account_id`,`captured_at`);
 
+ALTER TABLE `account_owners`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_account_owner` (`account_id`,`entity_id`),
+  ADD KEY `idx_acco_entity` (`entity_id`);
+
 ALTER TABLE `assets`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_assets_entity` (`entity_id`),
   ADD KEY `idx_assets_account` (`account_id`),
   ADD KEY `fk_assets_currency` (`currency_code`);
+
+ALTER TABLE `asset_owners`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_asset_owner` (`asset_id`,`entity_id`),
+  ADD KEY `idx_ao_entity` (`entity_id`);
 
 ALTER TABLE `audit_log`
   ADD PRIMARY KEY (`id`),
@@ -769,6 +846,10 @@ ALTER TABLE `company_financial_plans`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_cfp_entity` (`entity_id`);
 
+ALTER TABLE `person_financial_plans`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_pfp_entity` (`entity_id`);
+
 ALTER TABLE `company_clients`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_cc_entity` (`entity_id`),
@@ -783,7 +864,13 @@ ALTER TABLE `accounts`
 ALTER TABLE `account_balances`
   MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
+ALTER TABLE `account_owners`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
 ALTER TABLE `assets`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+ALTER TABLE `asset_owners`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 ALTER TABLE `audit_log`
@@ -858,6 +945,9 @@ ALTER TABLE `users`
 ALTER TABLE `company_financial_plans`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
+ALTER TABLE `person_financial_plans`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
 ALTER TABLE `company_clients`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
@@ -874,10 +964,18 @@ ALTER TABLE `accounts`
 ALTER TABLE `account_balances`
   ADD CONSTRAINT `fk_ab_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE;
 
+ALTER TABLE `account_owners`
+  ADD CONSTRAINT `fk_acco_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_acco_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
+
 ALTER TABLE `assets`
   ADD CONSTRAINT `fk_assets_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_assets_currency` FOREIGN KEY (`currency_code`) REFERENCES `currencies` (`code`),
   ADD CONSTRAINT `fk_assets_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
+
+ALTER TABLE `asset_owners`
+  ADD CONSTRAINT `fk_ao_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_ao_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
 ALTER TABLE `audit_log`
   ADD CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
@@ -981,6 +1079,9 @@ ALTER TABLE `transactions`
 ALTER TABLE `company_financial_plans`
   ADD CONSTRAINT `fk_cfp_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
+ALTER TABLE `person_financial_plans`
+  ADD CONSTRAINT `fk_pfp_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
+
 ALTER TABLE `company_clients`
   ADD CONSTRAINT `fk_cc_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
@@ -1014,7 +1115,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`
 
 INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
 ('app.name', 'PatriumHub', CURRENT_TIMESTAMP),
-('schema.version', '0.8.2', CURRENT_TIMESTAMP),
+('schema.version', '0.8.6', CURRENT_TIMESTAMP),
 ('ui.hide_amounts', '0', CURRENT_TIMESTAMP);
 
 -- Fin instalación PatriumHub
