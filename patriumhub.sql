@@ -55,6 +55,20 @@
 --   · Tema claro/oscuro: solo UI (html[data-theme] + localStorage patrium-theme).
 --     No hay columna de preferencia; cards accent y thead usan tokens de superficie
 --     (--navy / --table-head) para contraste en ambos temas.
+--   · Activos varios: DELETE vía POST /activos/{id}/eliminar (borra asset_owners + assets).
+--   · Botones Eliminar de la UI usan clase btn danger (rojo) en toda la app.
+--   · Vista /gastos: análisis de egresos (transactions expense/payment) +
+--     presupuesto del mes de cierre del rango + proyección prorrateada del año;
+--     filtros entity_id (vacío=todas | people | companies | id), currency,
+--     preset/from/to. Sin tablas nuevas.
+--     Gráfico categoría × mes: siempre los 12 meses del año de cierre del filtro
+--     (ene–dic; ceros si no hay datos); barras horizontales apiladas top 10 + Otros;
+--     tooltip = monto y % del total del mes (ExpenseAnalysisService::byCategoryMonth).
+--   · Categorías de movimiento (seed + Catalog::ensureTransactionCategories): además
+--     de las base, Comida, Salidas, Suscripciones, Limpieza, Higiene personal,
+--     Kiosco, Librería, Auto, Arreglos, Celular, Alquiler/es (kind expense).
+--   · Nav admin: Inicio → Dashboard → Objetivos → Proyecciones → Presupuestos →
+--     Gastos → Movimientos → Patrimonio (último, accent ámbar).
 --   · Volver arriba: botón fijo en el layout (aparece al scrollear); no hay columna.
 
 --   · Cobrables (receivables): listado /cobrables y pestaña en persona/empresa con
@@ -1185,7 +1199,18 @@ INSERT INTO `transaction_categories` (`id`, `name`, `kind`, `is_system`) VALUES
 (7, 'Sueldos', 'expense', 1),
 (8, 'Honorarios', 'expense', 1),
 (9, 'Impuestos', 'expense', 1),
-(10, 'Servicios', 'expense', 1);
+(10, 'Servicios', 'expense', 1),
+(11, 'Comida', 'expense', 1),
+(12, 'Salidas', 'expense', 1),
+(13, 'Suscripciones', 'expense', 1),
+(14, 'Limpieza', 'expense', 1),
+(15, 'Higiene personal', 'expense', 1),
+(16, 'Kiosco', 'expense', 1),
+(17, 'Librería', 'expense', 1),
+(18, 'Auto', 'expense', 1),
+(19, 'Arreglos', 'expense', 1),
+(20, 'Celular', 'expense', 1),
+(21, 'Alquiler/es', 'expense', 1);
 
 -- Password: admin123  (cambiar tras el primer login)
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`, `last_login_at`, `created_at`, `updated_at`) VALUES
