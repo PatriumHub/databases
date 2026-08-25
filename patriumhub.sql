@@ -1,7 +1,7 @@
 -- =============================================================================
 -- PatriumHub — ÚNICO archivo de instalación
 -- BD: patriumhub · utf8mb4 / utf8mb4_unicode_ci
--- Schema version: 0.8.7
+-- Schema version: 0.8.8
 --
 -- Importar SOLO este archivo en phpMyAdmin (Importar → Ejecutar).
 -- Crea la BD, todas las tablas, índices, FKs y seed mínimo.
@@ -19,7 +19,8 @@
 --          receivables.status con 'paid'.
 --
 -- Reglas de app (no son columnas extra; el motor las aplica):
---   · budget_items pending con period_ym <= mes actual → suman a pasivos / neto.
+--   · budget_templates / budget_items: category_id opcional (mismos
+--     transaction_categories que movimientos); al pagar se copia al egreso.
 --     Meses futuros se pueden generar al navegar Presupuestos, pero NO bajan el neto
 --     hasta que llega ese mes (Y-m del servidor).
 --   · Proyecciones consolidadas (/proyecciones) leen person_financial_plans +
@@ -52,11 +53,15 @@
 --       alta en /objetivos/nuevo (también Cumplidos N/N).
 --   · Resumen persona: bloque Proyección usa la hoja del año calendario
 --     (no el activeYear guardado); si no hay hoja, la más cercana.
---   · Tema claro/oscuro: solo UI (html[data-theme] + localStorage patrium-theme).
---     No hay columna de preferencia; cards accent y thead usan tokens de superficie
---     (--navy / --table-head) para contraste en ambos temas.
 --   · Activos varios: DELETE vía POST /activos/{id}/eliminar (borra asset_owners + assets).
---   · Botones Eliminar de la UI usan clase btn danger (rojo) en toda la app.
+--   · Movimientos: DELETE vía POST /movimientos/{id}/eliminar (revierte saldos; si estaba
+--     ligado a budget_items paid, el ítem vuelve a pending). Sin columnas nuevas.
+--   · Acciones de tablas (UI): iconos .btn-icon — Eliminar = danger (rojo);
+--     Pagar/Cobrar = warn (amarillo). Helpers ui_icon / icon_action_* en helpers.php.
+--   · Tema claro/oscuro: solo UI (html[data-theme] + localStorage patrium-theme).
+--     Evento JS patrium:theme redibuja Chart.js (ticks/leyendas) sin recargar.
+--     Cards accent y thead usan tokens de superficie (--navy / --table-head).
+--   · Botones Eliminar de la UI usan clase btn / btn-icon danger (rojo) en toda la app.
 --   · Vista /gastos: análisis de egresos (transactions expense/payment) +
 --     presupuesto del mes de cierre del rango + proyección prorrateada del año;
 --     filtros entity_id (vacío=todas | people | companies | id), currency,
@@ -66,7 +71,8 @@
 --     tooltip = monto y % del total del mes (ExpenseAnalysisService::byCategoryMonth).
 --   · Categorías de movimiento (seed + Catalog::ensureTransactionCategories): además
 --     de las base, Comida, Salidas, Suscripciones, Limpieza, Higiene personal,
---     Kiosco, Librería, Auto, Arreglos, Celular, Alquiler/es (kind expense).
+--     Kiosco, Librería, Auto, Arreglos, Celular, Alquiler/es,
+--     Medicación & Farmacia (kind expense).
 --   · Nav admin: Inicio → Dashboard → Objetivos → Proyecciones → Presupuestos →
 --     Gastos → Movimientos → Patrimonio (último, accent ámbar).
 --   · Volver arriba: botón fijo en el layout (aparece al scrollear); no hay columna.
@@ -468,6 +474,7 @@ CREATE TABLE `budget_templates` (
   `currency_code` char(3) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ARS',
   `frequency` enum('monthly') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'monthly',
   `due_day` tinyint UNSIGNED NOT NULL DEFAULT '1',
+  `category_id` int UNSIGNED DEFAULT NULL,
   `suggested_account_id` int UNSIGNED DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `include_in_net_worth` tinyint(1) NOT NULL DEFAULT '1',
@@ -493,6 +500,7 @@ CREATE TABLE `budget_items` (
   `due_date` date NOT NULL,
   `status` enum('pending','paid','skipped') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `include_in_net_worth` tinyint(1) NOT NULL DEFAULT '1',
+  `category_id` int UNSIGNED DEFAULT NULL,
   `account_id` int UNSIGNED DEFAULT NULL,
   `transaction_id` bigint UNSIGNED DEFAULT NULL,
   `paid_amount` decimal(18,2) DEFAULT NULL,
@@ -785,6 +793,7 @@ ALTER TABLE `budget_items`
   ADD KEY `idx_bi_status` (`status`),
   ADD KEY `idx_bi_due` (`due_date`),
   ADD KEY `fk_bi_currency` (`currency_code`),
+  ADD KEY `fk_bi_category` (`category_id`),
   ADD KEY `fk_bi_account` (`account_id`),
   ADD KEY `fk_bi_tx` (`transaction_id`);
 
@@ -793,6 +802,7 @@ ALTER TABLE `budget_templates`
   ADD KEY `idx_bt_entity` (`entity_id`),
   ADD KEY `idx_bt_active` (`is_active`),
   ADD KEY `fk_bt_currency` (`currency_code`),
+  ADD KEY `fk_bt_category` (`category_id`),
   ADD KEY `fk_bt_account` (`suggested_account_id`);
 
 ALTER TABLE `business_valuations`
@@ -1073,6 +1083,7 @@ ALTER TABLE `audit_log`
 
 ALTER TABLE `budget_items`
   ADD CONSTRAINT `fk_bi_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_bi_category` FOREIGN KEY (`category_id`) REFERENCES `transaction_categories` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_bi_currency` FOREIGN KEY (`currency_code`) REFERENCES `currencies` (`code`),
   ADD CONSTRAINT `fk_bi_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_bi_template` FOREIGN KEY (`template_id`) REFERENCES `budget_templates` (`id`) ON DELETE CASCADE,
@@ -1080,6 +1091,7 @@ ALTER TABLE `budget_items`
 
 ALTER TABLE `budget_templates`
   ADD CONSTRAINT `fk_bt_account` FOREIGN KEY (`suggested_account_id`) REFERENCES `accounts` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_bt_category` FOREIGN KEY (`category_id`) REFERENCES `transaction_categories` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_bt_currency` FOREIGN KEY (`currency_code`) REFERENCES `currencies` (`code`),
   ADD CONSTRAINT `fk_bt_entity` FOREIGN KEY (`entity_id`) REFERENCES `entities` (`id`) ON DELETE CASCADE;
 
@@ -1210,7 +1222,8 @@ INSERT INTO `transaction_categories` (`id`, `name`, `kind`, `is_system`) VALUES
 (18, 'Auto', 'expense', 1),
 (19, 'Arreglos', 'expense', 1),
 (20, 'Celular', 'expense', 1),
-(21, 'Alquiler/es', 'expense', 1);
+(21, 'Alquiler/es', 'expense', 1),
+(22, 'Medicación & Farmacia', 'expense', 1);
 
 -- Password: admin123  (cambiar tras el primer login)
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`, `last_login_at`, `created_at`, `updated_at`) VALUES
@@ -1220,7 +1233,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`
 
 INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
 ('app.name', 'PatriumHub', CURRENT_TIMESTAMP),
-('schema.version', '0.8.7', CURRENT_TIMESTAMP),
+('schema.version', '0.8.8', CURRENT_TIMESTAMP),
 ('ui.hide_amounts', '0', CURRENT_TIMESTAMP);
 
 -- Fin instalación PatriumHub
