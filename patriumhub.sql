@@ -32,6 +32,15 @@
 --     Presupuestos por grupos totaliza budget_templates activas por moneda (no las mezcla).
 --     Meses futuros se pueden generar al navegar Presupuestos, pero NO bajan el neto
 --     hasta que llega ese mes (Y-m del servidor).
+--   · Reporte patrimonial (/reportes/patrimonial) NO usa net_worth_snapshots: calcula todo
+--     desde las tablas de origen y el total de cada clase es la suma de sus líneas, así que
+--     se puede emitir cualquier mes. Corte = último día del mes (hoy si está en curso); nada
+--     posterior entra. Saldo de cuenta al corte = accounts.balance menos el efecto de los
+--     movimientos con occurred_at >= corte (accounts.balance es acumulado y no mira la fecha;
+--     account_balances guarda cuándo se capturó, no a qué fecha corresponde). Cobrables y
+--     presupuestos: solo los exigibles al corte. Activos, propiedades, inventarios,
+--     participaciones y liabilities van a valor vigente (no hay histórico por línea).
+--     No escribe nada. Salida a PDF por impresión del navegador (@media print).
 --   · Proyecciones consolidadas (/proyecciones) leen person_financial_plans +
 --     company_financial_plans (solo lectura; la carga es por ficha).
 --   · Insight «promedio mensual» = disponible neto anual / 12 (persona y /proyecciones).
@@ -279,17 +288,6 @@ CREATE TABLE `account_balances` (
   `balance` decimal(18,2) NOT NULL DEFAULT '0.00',
   `balance_held` decimal(18,2) NOT NULL DEFAULT '0.00',
   `source` enum('manual','integration','system') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manual',
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Tabla `account_owners` (co-titulares personas; empresas usan solo accounts.entity_id)
---
-CREATE TABLE `account_owners` (
-  `id` int UNSIGNED NOT NULL,
-  `account_id` int UNSIGNED NOT NULL,
-  `entity_id` int UNSIGNED NOT NULL,
-  `ownership_pct` decimal(7,4) NOT NULL DEFAULT '100.0000',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
