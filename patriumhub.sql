@@ -21,6 +21,15 @@
 -- Reglas de app (no son columnas extra; el motor las aplica):
 --   · budget_templates / budget_items: category_id opcional (mismos
 --     transaction_categories que movimientos); al pagar se copia al egreso.
+--     Editar la plantilla reaplica monto/nombre/moneda/vencimiento/categoría sobre sus
+--     ítems con status='pending' y period_ym >= mes actual (BudgetService::syncPendingItems);
+--     paid/skipped intactos. ensurePeriod() hace lo mismo por período
+--     (syncPendingItemsForPeriod): el total del período = total de Presupuestos por grupos.
+--     Los períodos pasados no se tocan (pendiente atrasado = deuda como se facturó):
+--     un cambio de precio por inflación rige del mes actual en adelante.
+--     Los gastos se crean solo desde Presupuestos por grupos (no hay ítem suelto de un mes).
+--     Totales del mes usan COALESCE(paid_amount, amount) y filtran currency_code;
+--     Presupuestos por grupos totaliza budget_templates activas por moneda (no las mezcla).
 --     Meses futuros se pueden generar al navegar Presupuestos, pero NO bajan el neto
 --     hasta que llega ese mes (Y-m del servidor).
 --   · Proyecciones consolidadas (/proyecciones) leen person_financial_plans +
