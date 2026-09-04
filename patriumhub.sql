@@ -83,7 +83,10 @@
 --   · Vista /gastos: análisis de egresos (transactions expense/payment) +
 --     presupuesto del mes de cierre del rango + proyección prorrateada del año;
 --     filtros entity_id (vacío=todas | people | companies | id), currency,
---     preset/from/to. Sin tablas nuevas.
+--     preset/from/to. Sin tablas nuevas. KPIs en bloques visuales
+--     (gasto · ingresos/resultado · presupuesto · proyección · perfil);
+--     card Queda = ingresos − egresos del rango (available_est). Sin alertas
+--     de insight en la vista (ExpenseAnalysisService ya no las emite).
 --     Gráfico categoría × mes: siempre los 12 meses del año de cierre del filtro
 --     (ene–dic; ceros si no hay datos); barras horizontales apiladas top 10 + Otros;
 --     tooltip = monto y % del total del mes (ExpenseAnalysisService::byCategoryMonth).
@@ -99,6 +102,10 @@
 --       cabeceras ordenables (cliente); ficha entidad muestra due_date (Vence);
 --       alta/edición/cobro desde ficha usa return_to seguro (safe_return_path) y
 --       vuelve a la entidad, no al listado general.
+--
+--   · Sesión PHP: cookie e idle = 24 h por defecto (SESSION_LIFETIME / SESSION_IDLE = 86400).
+--     Cada request autenticado renueva la cookie (ventana deslizante). Sin actividad
+--     en ese lapso, el próximo request cierra la sesión. No es columna de BD.
 --
 -- No incluye: datos de producción ni credenciales de integraciones.
 --
