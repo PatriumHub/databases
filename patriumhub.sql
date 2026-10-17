@@ -93,7 +93,7 @@
 --   · Categorías de movimiento (seed + Catalog::ensureTransactionCategories): además
 --     de las base, Comida, Salidas, Suscripciones, Limpieza, Higiene personal,
 --     Kiosco, Librería, Auto, Arreglos, Celular, Alquiler/es,
---     Medicación & Farmacia (kind expense).
+--     Medicación & Farmacia, Familia (kind expense).
 --   · Nav admin: Inicio → Dashboard → Objetivos → Proyecciones → Presupuestos →
 --     Gastos → Movimientos → Patrimonio (último, accent ámbar).
 --   · Volver arriba: botón fijo en el layout (aparece al scrollear); no hay columna.
@@ -1237,7 +1237,8 @@ INSERT INTO `transaction_categories` (`id`, `name`, `kind`, `is_system`) VALUES
 (19, 'Arreglos', 'expense', 1),
 (20, 'Celular', 'expense', 1),
 (21, 'Alquiler/es', 'expense', 1),
-(22, 'Medicación & Farmacia', 'expense', 1);
+(22, 'Medicación & Farmacia', 'expense', 1),
+(23, 'Familia', 'expense', 1);
 
 -- Password: admin123  (cambiar tras el primer login)
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`, `last_login_at`, `created_at`, `updated_at`) VALUES
